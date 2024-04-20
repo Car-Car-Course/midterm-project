@@ -1,80 +1,95 @@
+import abc
+import csv
 import logging
-import sys
+import re
+from typing import Optional, Tuple, cast
 
-import numpy as np
-import pandas
 import requests
 import socketio
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("scoreboard")
 
 
-class ScoreboardFake:
+class Scoreboard(abc.ABC):
+    """
+    The Scoreboard class connects to the server socket and enables updating score by sending UID.
+    """
+
+    @abc.abstractmethod
+    def add_UID(self, UID_str: str) -> Tuple[int, float]:
+        """Send {UID_str} to server to update score. Returns (score, time_remaining)."""
+        pass
+
+    @abc.abstractmethod
+    def get_current_score(self) -> Optional[int]:
+        """Fetch current score from server. Returns current score."""
+        pass
+
+
+class ScoreboardFake(Scoreboard):
     """
     Fake scoreboard. Check uid with fakeUID.csv
     """
 
     def __init__(self, teamname, filepath):
-        raw_data = np.array(pandas.read_csv(filepath))  # .values
-
         self.total_score = 0
         self.team = teamname
-
+        log.info(f"Using fake scoreboard!")
         log.info(f"{self.team} is playing game!")
 
-        self.card_list = [int(a, 16) for a in raw_data.T[0]]
+        self._read_UID_file(filepath)
 
-        # data member specific for Game: self.cardValue, self.visitList
-        self.visit_list = list()
-        self.card_value = dict()
-        for i in range(len(raw_data)):
-            self.card_value[self.card_list[i]] = raw_data[i][1]
+        self.visit_list = set()
+
+    def _read_UID_file(self, filepath: str):
+        self.uid_to_score = {}
+        with open(filepath, "r") as f:
+            reader = csv.reader(f)
+            rows = list(reader)
+            for row in rows[1:]:
+                uid, score = row
+                self.uid_to_score[uid] = int(score)
         log.info("Successfully read the UID file!")
 
-    def add_UID(self, UID_str):
-        UID = int(UID_str, 16)  # hex to dec
+    def add_UID(self, UID_str: str) -> Tuple[int, float]:
+        log.debug(f"Adding UID: {UID_str}")
 
-        if UID not in self.card_list:
-            log.info("This UID doesn't exist in the UID list file:", hex(UID))
+        if not isinstance(UID_str, str):
+            raise ValueError(f"UID format error! (expected: str) (got: {UID_str})")
+
+        if not re.match(r"^[0-9A-Fa-f]{8}$", UID_str):
+            raise ValueError(
+                f"UID format error! (expected: 8 hex digits) (got: {UID_str})"
+            )
+
+        if UID_str not in self.uid_to_score:
+            log.info(f"This UID is not in the list: {UID_str}")
+            return 0, 0
+        elif UID_str in self.visit_list:
+            log.info(f"This UID has been visited: {UID_str}")
+            return 0, 0
         else:
-            if UID in self.visit_list:
-                log.info("This UID is already visited:", hex(UID))
-            else:
-                point = self.card_value[UID]
-                self.total_score += point
-                log.info(f"A treasure is found! You got {point} points.")
-                log.info("Current score: " + str(self.total_score))
-                self.visit_list.append(UID)
+            point = self.uid_to_score[UID_str]
+            self.total_score += point
+            log.info(f"A treasure is found! You got {point} points.")
+            self.visit_list.add(UID_str)
+            return point, 0
 
     def get_current_score(self):
         return int(self.total_score)
 
 
-class TeamNamespace(socketio.ClientNamespace):
-    def on_connect(self):
-        log.info(f"Connected with sid {self.client.get_sid(namespace='/team')}")
-
-    def on_game_started(self, data):
-        teamname = data["teamname"]
-        log.info(f"Game started! Playing game as {teamname}")
-
-    def on_UID_added(self, message):
-        log.info(message)
-
-
-class Scoreboard:
+class ScoreboardServer(Scoreboard):
     """
     The Scoreboard class connects to the server socket and enables updating score by sending UID.
     """
 
-    def __init__(self, team_name: str, host: str, debug: bool = False):
-        self.totalScore = 0
-        self.team_name = team_name
-        self.game = 0
+    def __init__(self, teamname: str, host=f"http://localhost:3000", debug=False):
+        self.teamname = teamname
         self.ip = host
 
-        log.info(f"{self.team_name} wants to play!")
-        log.info(f"connecting to server {self.ip}......")
+        log.info(f"{self.teamname} wants to play!")
+        log.info(f"connecting to server......{self.ip}")
 
         # create socket.io instance and connect to server
         self.socket = socketio.Client(logger=debug, engineio_logger=debug)
@@ -84,42 +99,81 @@ class Scoreboard:
 
         # start game
         log.info("Game is starting.....")
-        self._start_game(self.team_name)
+        self._start_game(self.teamname)
 
     def _start_game(self, teamname: str):
         payload = {"teamname": teamname}
-        self.socket.emit("start_game", payload, namespace="/team")
+        res = self.socket.call("start_game", payload, namespace="/team")
+        log.info(res)
 
-    def add_UID(self, UID_str: str):
+    def add_UID(self, UID_str: str) -> Tuple[int, float]:
         """Send {UID_str} to server to update score. Returns nothing."""
-        UID_len = len(UID_str)
-        log.info("In add_UID, UID = {}".format(UID_str))
-        if not isinstance(UID_str, str):
-            log.info(f"    UID type error! (Your type: {type(UID_str)}, expected: str)")
-        if UID_len != 8:
-            log.info(f"    UID length error! (Your length: {UID_len}, expected: 8)")
-        self.socket.emit("add_UID", UID_str, namespace="/team")
+        log.debug(f"Adding UID: {UID_str}")
 
-    def get_current_score(self):
+        if not isinstance(UID_str, str):
+            raise ValueError(f"UID format error! (expected: str) (got: {UID_str})")
+
+        if not re.match(r"^[0-9A-Fa-f]{8}$", UID_str):
+            raise ValueError(
+                f"UID format error! (expected: 8 hex digits) (got: {UID_str})"
+            )
+
+        res = self.socket.call("add_UID", UID_str, namespace="/team")
+        if not res:
+            log.error("Failed to add UID")
+            return 0, 0
+        res = cast(dict, res)
+        message = res.get("message", "No message")
+        score = res.get("score", 0)
+        time_remaining = res.get("time_remaining", 0)
+        log.info(message)
+        return score, time_remaining
+
+    def get_current_score(self) -> Optional[int]:
         try:
-            log.info(f"{self.ip}/current_score?sid={self.sid}")
-            r = requests.get(self.ip + "/current_score", params={"sid": self.sid})
-            return r.json()["current_score"]
+            log.debug(f"{self.ip}/current_score?sid={self.sid}")
+            res = requests.get(self.ip + "/current_score", params={"sid": self.sid})
+            return res.json()["current_score"]
         except Exception as e:
-            log.info(f"Failed to fetch current score: {e}")
+            log.error(f"Failed to fetch current score: {e}")
             return None
+
+
+class TeamNamespace(socketio.ClientNamespace):
+    def on_connect(self):
+        client = cast(socketio.Client, self.client)
+        log.info(f"Connected with sid {client.get_sid(namespace='/team')}")
+
+    def on_UID_added(self, message):
+        log.info(message)
+
+    def on_disconnect(self):
+        log.info("Disconnected from server")
 
 
 if __name__ == "__main__":
     import time
 
+    logging.basicConfig(level=logging.DEBUG)
+
     try:
-        scoreboard = Scoreboard("TeamName2", "http://140.112.175.18:5000")
-        # myScoreboard = ScoreboardFake("TeamName","data/fakeUID.csv")
-        time.sleep(6)
-        scoreboard.add_UID("61C9931C")
-        scoreboard.add_UID("D1874019")
-        scoreboard.add_UID("12346578")
-        log.info("score:", scoreboard.get_current_score())
+        # scoreboard = ScoreboardServer("TeamName2", "http://140.112.175.18:5000")
+        scoreboard = ScoreboardFake("TeamName", "data/fakeUID.csv")
+        time.sleep(1)
+
+        score, time_remaining = scoreboard.add_UID("10BA617E")
+        current_score = scoreboard.get_current_score()
+        log.info(f"Current score: {current_score}")
+        time.sleep(1)
+
+        score, time_remaining = scoreboard.add_UID("556D04D6")
+        current_score = scoreboard.get_current_score()
+        log.info(f"Current score: {current_score}")
+        time.sleep(1)
+
+        score, time_remaining = scoreboard.add_UID("12345678")
+        current_score = scoreboard.get_current_score()
+        log.info(f"Current score: {current_score}")
+
     except KeyboardInterrupt:
-        sys.exit(1)
+        exit(1)
