@@ -94,7 +94,7 @@ class ScoreboardServer(Scoreboard):
         # create socket.io instance and connect to server
         self.socket = socketio.Client(logger=debug, engineio_logger=debug)
         self.socket.register_namespace(TeamNamespace("/team"))
-        self.socket.connect(self.ip)
+        self.socket.connect(self.ip, socketio_path="scoreboard.io")
         self.sid = self.socket.get_sid(namespace="/team")
 
         # start game
@@ -157,8 +157,8 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
 
     try:
-        # scoreboard = ScoreboardServer("TeamName2", "http://140.112.175.18:5000")
-        scoreboard = ScoreboardFake("TeamName", "data/fakeUID.csv")
+        scoreboard = ScoreboardServer("TeamName2", "http://140.112.175.18")
+        # scoreboard = ScoreboardFake("TeamName", "data/fakeUID.csv")
         time.sleep(1)
 
         score, time_remaining = scoreboard.add_UID("10BA617E")
