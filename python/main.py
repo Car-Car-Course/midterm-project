@@ -6,7 +6,7 @@ import time
 
 import numpy as np
 import pandas
-from BTinterface import BTInterface
+# from BTinterface import BTInterface
 from maze import Action, Maze
 from score import ScoreboardServer, ScoreboardFake
 
@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 
 # TODO : Fill in the following information
 TEAM_NAME = "YOUR_TEAM_NAME"
-SERVER_URL = "http://140.112.175.18:5000/"
+SERVER_URL = "http://carcar.ntuee.org/scoreboard"
 MAZE_FILE = "data/small_maze.csv"
 BT_PORT = ""
 
@@ -39,7 +39,9 @@ def main(mode: int, bt_port: str, team_name: str, server_url: str, maze_file: st
     maze = Maze(maze_file)
     point = ScoreboardServer(team_name, server_url)
     # point = ScoreboardFake("your team name", "data/fakeUID.csv") # for local testing
-    interface = BTInterface(port=bt_port)
+
+    ### Bluetooth connection haven't been implemented yet, we will update ASAP ###
+    # interface = BTInterface(port=bt_port)
     # TODO : Initialize necessary variables
 
     if mode == "0":
