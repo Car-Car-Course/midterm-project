@@ -37,12 +37,20 @@
 #define RST_PIN 0                 // 讀卡機的重置腳位
 #define SS_PIN 0                  // 晶片選擇腳位
 MFRC522 mfrc522(SS_PIN, RST_PIN);  // 建立MFRC522物件
+// BT
+#define CUSTOM_NAME "HM10_Mega" // Max length is 12 characters [1]
+
 /*===========================define pin & create module object===========================*/
 
 /*============setup============*/
 void setup() {
     // bluetooth initialization
-    Serial1.begin(9600);
+    Serial.begin(115200); // Debug Monitor (USB)
+    while (!Serial);
+#ifdef DEBUG
+    Serial.println("Initializing HM-10...");
+#endif
+    initBT();
     // Serial window
     Serial.begin(9600);
     // RFID initial
