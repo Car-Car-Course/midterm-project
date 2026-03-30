@@ -45,12 +45,7 @@ MFRC522 mfrc522(SS_PIN, RST_PIN);  // 建立MFRC522物件
 /*============setup============*/
 void setup() {
     // bluetooth initialization
-    Serial.begin(115200); // Debug Monitor (USB)
-    while (!Serial);
-#ifdef DEBUG
-    Serial.println("Initializing HM-10...");
-#endif
-    initBT();
+    Serial3.begin(9600);  
     // Serial window
     Serial.begin(9600);
     // RFID initial
