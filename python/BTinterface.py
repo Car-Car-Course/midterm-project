@@ -3,7 +3,7 @@ import sys
 import time
 from typing import Optional
 
-sys.path.insert(0, "../CarCarImprove/chat_hm10")
+sys.path.insert(0, "../BlueTooth/chat_hm10")
 from hm10_esp32 import HM10ESP32Bridge
 
 log = logging.getLogger(__name__)
