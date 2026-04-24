@@ -19,3 +19,11 @@ pip install -r requirements.txt
 cd python
 pip install -r requirements.txt
 ```
+
+## Usage
+
+Clone the repository, then run the following command to update the BlueTooth submodule:
+
+```bash
+git submodule update --init --recursive
+```
